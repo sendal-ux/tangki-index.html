@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Simulasi 2D Kendali Level Air Tangki Berbasis PID</title>
+<style>
+:root{font-family:Arial,Helvetica,sans-serif;color:#172033;background:#f3f6fa}
+*{box-sizing:border-box}body{margin:0;padding:20px}.wrap{max-width:1100px;margin:auto}
+header,.card{background:white;border:1px solid #dce3ec;border-radius:14px;padding:18px;margin-bottom:16px;box-shadow:0 2px 8px #1720330a}
+h1{font-size:clamp(22px,4vw,30px);margin:0 0 8px}h2{font-size:18px;margin:0 0 14px}
+.sub,.hint{color:#5e6b7d;font-size:13px;line-height:1.5}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.metric{background:#f5f8fc;border-radius:10px;padding:12px}.metric small{display:block;color:#687589;margin-bottom:6px}.metric strong{font-size:24px}
+label{display:block;font-size:13px;font-weight:600;color:#344054;margin-bottom:5px}
+input{width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px}
+button{border:0;border-radius:9px;padding:10px 16px;font-weight:700;cursor:pointer;background:#e8edf5;color:#172033}
+button.primary{background:#1769aa;color:white}button:disabled{opacity:.5;cursor:not-allowed}
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.scene{width:100%;max-width:760px;display:block;margin:auto}
+canvas{width:100%;height:260px;display:block}
+.results{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.result{padding:12px;background:#f5f8fc;border-radius:10px}.result b{display:block;margin-top:5px}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:9px;border-bottom:1px solid #e5eaf0}
+@media(max-width:760px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.metrics,.results{grid-template-columns:repeat(2,minmax(0,1fr))}body{padding:10px}}
+@media(max-width:420px){.grid{grid-template-columns:1fr 1fr}.metric strong{font-size:20px}}
+</style>
+</head>
+<body><main class="wrap">
+<header>
+<h1>Simulasi 2D Pengendalian Level Air Tangki Berbasis PID</h1>
+<div class="sub">Simulasi interaktif untuk pembelajaran dan dokumentasi proyek. Ubah parameter, jalankan simulasi, lalu amati respons level air, sinyal PWM, dan metrik performa kendali.</div>
+</header>
+<section class="card">
+<h2>Parameter simulasi (dapat diedit)</h2>
+<div class="grid">
+<div><label for="tank">Tinggi maksimum tangki (cm)</label><input id="tank" type="number" min="10" max="500" step="1" value="100"></div>
+<div><label for="sp">Set point (cm)</label><input id="sp" type="number" min="0" max="500" step=".5" value="75"></div>
+<div><label for="initial">Level awal (cm)</label><input id="initial" type="number" min="0" max="500" step=".5" value="0"></div>
+<div><label for="ts">Waktu sampling (s)</label><input id="ts" type="number" min=".01" max="2" step=".01" value=".1"></div>
+<div><label for="duration">Durasi simulasi (s)</label><input id="duration" type="number" min="1" max="600" step="1" value="30"></div>
+<div><label for="kp">Kp</label><input id="kp" type="number" min="0" max="1000" step=".01" value="8"></div>
+<div><label for="ki">Ki</label><input id="ki" type="number" min="0" max="1000" step=".001" value=".01"></div>
+<div><label for="kd">Kd</label><input id="kd" type="number" min="0" max="1000" step=".01" value="8"></div>
+<div><label for="rate">Laju pengisian maksimum (cm/s)</label><input id="rate" type="number" min=".1" max="1000" step=".1" value="10"></div>
+<div><label for="pmin">PWM minimum (%)</label><input id="pmin" type="number" min="0" max="100" step="1" value="0"></div>
+<div><label for="pmax">PWM maksimum (%)</label><input id="pmax" type="number" min="0" max="100" step="1" value="100"></div>
+<div><label for="tol">Toleransi settling (% SP)</label><input id="tol" type="number" min=".1" max="20" step=".1" value="2"></div>
+</div>
+<div class="controls"><button class="primary" id="run">▶ Jalankan</button><button id="pause">Ⅱ Jeda</button><button id="reset">↻ Reset</button><button id="defaults">Kembalikan parameter awal</button></div>
+<p class="hint" id="message">Siap. Parameter awal sesuai spesifikasi proyek.</p>
+</section>
+<section class="card">
+<h2>Visualisasi tangki dan sistem kendali</h2>
+<svg class="scene" viewBox="0 0 760 390" role="img" aria-label="Tangki air, sensor ultrasonik, pompa, MOSFET dan Arduino">
+<defs><clipPath id="tankClip"><path d="M300 92V320Q300 333 315 333H475Q490 333 490 320V92Z"/></clipPath><pattern id="waves" width="18" height="12" patternUnits="userSpaceOnUse"><path d="M0 6Q4 1 9 6T18 6" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="1.5"/></pattern></defs>
+<text x="380" y="28" text-anchor="middle" font-size="18" font-weight="bold" fill="#172033">SISTEM KENDALI LEVEL AIR</text>
+<rect x="345" y="43" width="70" height="34" rx="6" fill="#64748b"/><text x="380" y="65" text-anchor="middle" fill="white" font-size="13">HC-SR04</text>
+<path d="M360 77V91M400 77V91" stroke="#64748b" stroke-width="4"/>
+<path d="M300 92V320Q300 333 315 333H475Q490 333 490 320V92" fill="none" stroke="#26364a" stroke-width="6"/>
+<g clip-path="url(#tankClip)"><rect id="water" x="303" y="333" width="184" height="0" fill="#269bd1"/><rect id="waterwave" x="303" y="333" width="184" height="0" fill="url(#waves)"/></g>
+<line id="spLine" x1="290" y1="0" x2="500" y2="0" stroke="#e39b28" stroke-width="2.5" stroke-dasharray="7 5"/>
+<text id="spText" x="510" y="0" fill="#b7791f" font-size="13">SP 75 cm</text>
+<path d="M282 92V333M276 92H288M276 333H288" stroke="#64748b" stroke-width="1.5"/>
+<text x="268" y="97" text-anchor="end" font-size="11" fill="#64748b">Maks.</text><text x="268" y="337" text-anchor="end" font-size="11" fill="#64748b">0</text>
+<path d="M75 274V345H300V320" fill="none" stroke="#269bd1" stroke-width="9" stroke-linejoin="round"/>
+<rect x="35" y="220" width="85" height="56" rx="8" fill="#64748b"/><circle cx="77" cy="248" r="17" fill="#dce7f2" stroke="#26364a" stroke-width="3"/><path d="M77 235L83 248L77 261L71 248Z" fill="#475569"/>
+<text x="77" y="207" text-anchor="middle" font-size="13" fill="#172033" font-weight="bold">Pompa DC</text><text id="svgPwm" x="77" y="294" text-anchor="middle" font-size="12" fill="#475569">PWM 0%</text>
+<rect x="145" y="232" width="82" height="38" rx="6" fill="#64748b"/><text x="186" y="247" text-anchor="middle" font-size="11" fill="white">MOSFET</text><text x="186" y="261" text-anchor="middle" font-size="10" fill="white">Driver</text>
+<path d="M120 248H145M227 251H260V320H300" fill="none" stroke="#64748b" stroke-width="2"/>
+<rect x="555" y="216" width="165" height="83" rx="8" fill="#334155"/><text x="637" y="240" text-anchor="middle" fill="white" font-size="15" font-weight="bold">Arduino Uno</text><text x="637" y="261" text-anchor="middle" fill="#dbeafe" font-size="12">Kontrol PID</text><text x="637" y="281" text-anchor="middle" fill="#dbeafe" font-size="11">Kp · Ki · Kd</text>
+<path d="M490 110H530V226H555" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="5 4"/><text x="540" y="101" text-anchor="middle" fill="#64748b" font-size="11">Umpan balik sensor</text>
+<path d="M555 281H530V310H227V270" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="5 4"/><text x="380" y="365" text-anchor="middle" fill="#64748b" font-size="12">Pompa mengisi tangki berdasarkan keluaran PWM dari pengendali PID</text>
+</svg>
+<div class="metrics">
+<div class="metric"><small>Level air aktual</small><strong id="level">0,0 cm</strong></div>
+<div class="metric"><small>Set point</small><strong id="setpoint">75,0 cm</strong></div>
+<div class="metric"><small>Error</small><strong id="error">75,0 cm</strong></div>
+<div class="metric"><small>Waktu simulasi</small><strong id="clock">0,0 s</strong></div>
+<div class="metric"><small>Jarak sensor ke air</small><strong id="distance">100,0 cm</strong></div>
+<div class="metric"><small>Output PWM</small><strong id="pwm">0%</strong></div>
+<div class="metric"><small>Status pompa</small><strong id="pump">Mati</strong></div>
+<div class="metric"><small>Status kendali</small><strong id="state">Siap</strong></div>
+</div>
+</section>
+<section class="card"><h2>Grafik respons level air</h2><canvas id="chart" width="1000" height="330"></canvas><div class="hint">Garis biru: level air aktual · Garis jingga: set point · Area arsiran: batas toleransi settling.</div></section>
+<section class="card"><h2>Hasil evaluasi performa</h2>
+<div class="results">
+<div class="result">Rise time<b id="rise">—</b></div><div class="result">Settling time<b id="settle">—</b></div><div class="result">Overshoot<b id="overshoot">—</b></div><div class="result">Error akhir<b id="endError">—</b></div>
+</div><p class="hint" id="evaluation">Jalankan simulasi untuk menghitung parameter performa.</p>
+</section>
+<section class="card"><h2>Catatan model</h2><p class="hint">Model konseptual menganggap laju pengisian berbanding lurus dengan PWM: laju = (PWM/100) × laju maksimum. Pompa hanya dapat mengisi air, tidak mengurasnya. Model tidak memasukkan kebocoran, gangguan aliran, keterlambatan sensor, maupun dinamika motor. PID memakai derivatif pengukuran untuk mengurangi derivative kick dan pembatasan keluaran PWM sesuai batas yang diatur. Karena itu, hasil merupakan simulasi teoritis, bukan hasil pengujian perangkat keras.</p><p class="hint">Settling time dihitung sebagai waktu pertama level masuk ke rentang SP ± toleransi dan tetap berada di dalam rentang tersebut sampai akhir simulasi. Rise time dihitung saat level pertama kali mencapai 90% set point.</p></section>
+<footer class="hint" style="text-align:center;padding:8px">Simulasi edukasi kendali level air tangki berbasis PID · Dapat dijalankan secara lokal melalui browser.</footer>
+</main>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const ids=['tank','sp','initial','ts','duration','kp','ki','kd','rate','pmin','pmax','tol'];
+const defaults={tank:100,sp:75,initial:0,ts:.1,duration:30,kp:8,ki:.01,kd:8,rate:10,pmin:0,pmax:100,tol:2};
+let cfg,level,time,pwm,integral,lastLevel,history,running=false,done=false,raf=0,lastFrame=0,acc=0;
+const num=id=>Number($(id).value);
+const fmt=(x,n=2)=>Number(x).toFixed(n).replace('.',',');
+function readConfig(){
+ cfg={};ids.forEach(id=>cfg[id]=num(id));
+ if(ids.some(id=>!Number.isFinite(cfg[id])))throw Error('Semua parameter harus berupa angka yang valid.');
+ if(cfg.tank<=0||cfg.sp<0||cfg.sp>cfg.tank||cfg.initial<0||cfg.initial>cfg.tank)throw Error('Pastikan tinggi tangki positif dan set point serta level awal berada antara 0 dan tinggi maksimum tangki.');
+ if(cfg.ts<=0||cfg.duration<=0||cfg.rate<=0)throw Error('Sampling, durasi, dan laju maksimum harus lebih besar dari nol.');
+ if(cfg.pmin<0||cfg.pmax>100||cfg.pmin>cfg.pmax)throw Error('Rentang PWM harus memenuhi 0 ≤ PWM minimum ≤ PWM maksimum ≤ 100%.');
+ if(cfg.tol<=0||cfg.tol>=100)throw Error('Toleransi harus lebih besar dari 0 dan kurang dari 100%.');
+ if(cfg.duration/cfg.ts>200000)throw Error('Jumlah langkah simulasi terlalu besar. Perbesar waktu sampling atau kurangi durasi.');
+}
+function resetState(){
+ running=false;done=false;cancelAnimationFrame(raf);time=0;level=cfg.initial;pwm=0;integral=0;lastLevel=level;history=[{t:0,h:level,p:0}];lastFrame=0;acc=0;
+ $('message').textContent='Parameter siap. Tekan Jalankan untuk memulai.';$('state').textContent='Siap';render();
+}
+function simulateStep(){
+ const e=cfg.sp-level,derivative=-(level-lastLevel)/cfg.ts;
+ const raw=cfg.kp*e+cfg.ki*integral+cfg.kd*derivative;
+ pwm=Math.max(cfg.pmin,Math.min(cfg.pmax,raw));
+ if((raw>=cfg.pmin&&raw<=cfg.pmax)||(raw>cfg.pmax&&e<0)||(raw<cfg.pmin&&e>0))integral+=e*cfg.ts;
+ const corrected=cfg.kp*e+cfg.ki*integral+cfg.kd*derivative;
+ pwm=Math.max(cfg.pmin,Math.min(cfg.pmax,corrected));
+ lastLevel=level;
+ level=Math.max(0,Math.min(cfg.tank,level+(pwm/100*cfg.rate*cfg.ts)));
+ time=Math.min(cfg.duration,+(time+cfg.ts).toFixed(8));
+ history.push({t:time,h:level,p:pwm});
+}
+function metrics(){
+ const tol=cfg.sp*cfg.tol/100,lo=cfg.sp-tol,hi=cfg.sp+tol;
+ const rise=history.find(p=>p.h>=cfg.sp*.9);
+ let settle=null;
+ for(let i=0;i<history.length;i++){
+  if(history[i].h>=lo&&history[i].h<=hi&&history.slice(i).every(p=>p.h>=lo-1e-8&&p.h<=hi+1e-8)){settle=history[i].t;break;}
+ }
+ const peak=Math.max(...history.map(p=>p.h));
+ $('rise').textContent=rise?fmt(rise.t)+' s':'Tidak tercapai';
+ $('settle').textContent=settle!==null?fmt(settle)+' s':'Tidak tercapai';
+ $('overshoot').textContent=fmt(Math.max(0,(peak-cfg.sp)/Math.max(cfg.sp,1e-9)*100))+'%';
+ $('endError').textContent=fmt(cfg.sp-level)+' cm';
+ $('evaluation').textContent=settle===null?'Level tidak menetap di dalam rentang '+fmt(lo)+'–'+fmt(hi)+' cm sampai akhir simulasi.':`Level memasuki dan bertahan pada rentang ${fmt(lo)}–${fmt(hi)} cm mulai ${fmt(settle)} s.`;
+}
+function render(){
+ const e=cfg.sp-level,dist=cfg.tank-level;
+ $('level').textContent=fmt(level,2)+' cm';$('setpoint').textContent=fmt(cfg.sp,2)+' cm';$('error').textContent=fmt(e,2)+' cm';$('clock').textContent=fmt(time,2)+' s';$('distance').textContent=fmt(dist,2)+' cm';$('pwm').textContent=fmt(pwm,1)+'%';$('pump').textContent=pwm>0.01?'Aktif':'Mati';
+ $('svgPwm').textContent='PWM '+fmt(pwm,0)+'%';
+ const top=92,base=333,usable=base-top,waterHeight=level/cfg.tank*usable,waterY=base-waterHeight;
+ $('water').setAttribute('y',waterY);$('water').setAttribute('height',waterHeight);$('waterwave').setAttribute('y',waterY);$('waterwave').setAttribute('height',waterHeight);
+ const sy=base-cfg.sp/cfg.tank*usable;$('spLine').setAttribute('y1',sy);$('spLine').setAttribute('y2',sy);$('spText').setAttribute('y',sy-7);$('spText').textContent='SP '+fmt(cfg.sp,1)+' cm';
+ drawChart();
+ if(done){$('state').textContent='Selesai';metrics();}
+ else if(running)$('state').textContent='Berjalan';
+ else if(time>0)$('state').textContent='Dijeda';
+}
+function drawChart(){
+ const c=$('chart'),ctx=c.getContext('2d'),w=c.width,h=c.height,L=55,R=20,T=18,B=38,pw=w-L-R,ph=h-T-B;
+ ctx.clearRect(0,0,w,h);
+ const X=t=>L+t/cfg.duration*pw,Y=v=>T+(cfg.tank-v)/cfg.tank*ph;
+ ctx.font='13px Arial';ctx.fillStyle='#526174';ctx.textAlign='right';ctx.textBaseline='middle';
+ for(let i=0;i<=4;i++){let v=cfg.tank*i/4,y=Y(v);ctx.strokeStyle='#e5eaf0';ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(w-R,y);ctx.stroke();ctx.fillText(fmt(v,0),L-9,y);}
+ ctx.textAlign='center';ctx.textBaseline='top';
+ for(let i=0;i<=6;i++){let t=cfg.duration*i/6,x=X(t);ctx.fillText(fmt(t,0),x,h-B+9);}
+ const tol=cfg.sp*cfg.tol/100,lo=Math.max(0,cfg.sp-tol),hi=Math.min(cfg.tank,cfg.sp+tol);
+ ctx.fillStyle='rgba(38,155,209,.10)';ctx.fillRect(L,Y(hi),pw,Y(lo)-Y(hi));
+ ctx.strokeStyle='#d99127';ctx.lineWidth=2.5;ctx.setLineDash([8,6]);ctx.beginPath();ctx.moveTo(L,Y(cfg.sp));ctx.lineTo(w-R,Y(cfg.sp));ctx.stroke();ctx.setLineDash([]);
+ if(history.length>1){ctx.strokeStyle='#1687c9';ctx.lineWidth=3;ctx.beginPath();history.forEach((p,i)=>i?ctx.lineTo(X(p.t),Y(p.h)):ctx.moveTo(X(p.t),Y(p.h)));ctx.stroke();}
+ ctx.fillStyle='#526174';ctx.font='12px Arial';ctx.textAlign='center';ctx.fillText('Waktu (s)',L+pw/2,h-13);
+}
+function frame(now){
+ if(!running)return;
+ if(!lastFrame)lastFrame=now;
+ acc+=Math.min((now-lastFrame)/1000,.25);lastFrame=now;
+ let steps=0;while(acc>=cfg.ts&&time<cfg.duration&&steps<10000){simulateStep();acc-=cfg.ts;steps++;}
+ if(time>=cfg.duration-1e-9){time=cfg.duration;running=false;done=true;$('message').textContent='Simulasi selesai. Hasil evaluasi ditampilkan di bawah grafik.';}
+ render();if(running)raf=requestAnimationFrame(frame);
+}
+$('run').addEventListener('click',()=>{
+ try{
+  if(running)return;
+  if(!cfg||done){readConfig();resetState();}
+  else{readConfig();}
+  running=true;lastFrame=0;$('message').textContent='Simulasi sedang berjalan.';render();raf=requestAnimationFrame(frame);
+ }catch(e){$('message').textContent=e.message;alert(e.message);}
+});
+$('pause').addEventListener('click',()=>{if(running){running=false;cancelAnimationFrame(raf);$('message').textContent='Simulasi dijeda. Tekan Jalankan untuk melanjutkan.';render();}});
+$('reset').addEventListener('click',()=>{try{readConfig();resetState();}catch(e){alert(e.message);}});
+$('defaults').addEventListener('click',()=>{ids.forEach(id=>$(id).value=defaults[id]);readConfig();resetState();});
+ids.forEach(id=>$(id).addEventListener('change',()=>{if(!running){try{readConfig();resetState();}catch(e){$('message').textContent=e.message;}}}));
+readConfig();resetState();
+})();
+</script>
+</body></html>
